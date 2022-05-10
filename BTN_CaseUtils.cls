@@ -225,6 +225,7 @@ public class BTN_CaseUtils {
         Set<Id> jobAppIdsNotInterested = new Set<Id>();
         Set<Id> jobAppIdsOfferExpired = new Set<Id>();
         Set<Id> onboardingToAccept = new Set<Id>();
+        Set<Id> onboardingToAcceptContactIds = new Set<Id>();
         for (Case newCaseRecord : newCases) {
             if ((oldCaseMap == null || newCaseRecord.Status != oldCaseMap.get(newCaseRecord.Id).Status)) {
                 if (!isInternalOnboardingCase(newCaseRecord)) {
@@ -234,6 +235,7 @@ public class BTN_CaseUtils {
                         jobAppIdsOfferExpired.add(newCaseRecord.Id);
                     } else if (newCaseRecord.Status.equals(BTN_ConstantRepo.STATUS_CONTRACT_SIGNED)) {
                         onboardingToAccept.add(newCaseRecord.Id);
+                        onboardingToAcceptContactIds.add(newCaseRecord.ContactId);
                     }
                 } else if (String.isNotBlank(newCaseRecord.ParentId)) {
                     if (newCaseRecord.Status.equals(BTN_ConstantRepo.CASE_STATUS_APPROVED)) {
@@ -253,7 +255,7 @@ public class BTN_CaseUtils {
                 && jobAppIdsOfferExpired.isEmpty()
                 && onboardingToAccept.isEmpty())) {
             for (Case caseRecord : [
-                    SELECT Id, IsClosed,Status,ParentId, (SELECT Id,Status__c FROM Candidates_from_HR__r)
+                    SELECT Id, IsClosed,Status,ParentId,ContactId, (SELECT Id,Status__c FROM Candidates_from_HR__r)
                     FROM Case
                     WHERE Id IN :jobAppIdsContractSigned
                     OR Id IN :jobAppIdsOnboarding
@@ -261,6 +263,7 @@ public class BTN_CaseUtils {
                     OR Id IN :jobAppIdsNotInterested
                     OR Id IN :jobAppIdsOfferExpired
                     OR ParentId IN :onboardingToAccept
+                    OR (ContactId IN : onboardingToAcceptContactIds AND Id NOT IN :onboardingToAccept)
             ]) {
                 if (jobAppIdsContractSigned.contains(caseRecord.Id)) {
                     if (!casesForUpdate.containsKey(caseRecord.Id) && !caseRecord.IsClosed) {
@@ -309,6 +312,11 @@ public class BTN_CaseUtils {
                     }
                 } else if (onboardingToAccept.contains(caseRecord.ParentId) && !caseRecord.IsClosed && !casesForUpdate.containsKey(caseRecord.Id)) {
                     casesForUpdate.put(caseRecord.Id, new Case(Id = caseRecord.Id, Status = BTN_ConstantRepo.CASE_STATUS_APPROVED));
+                } else if (onboardingToAcceptContactIds.contains(caseRecord.ContactId)
+                        && !caseRecord.IsClosed
+                        && caseRecord.Status != BTN_ConstantRepo.STATUS_CONTRACT_SIGNED
+                        && !casesForUpdate.containsKey(caseRecord.Id)) {
+                    casesForUpdate.put(caseRecord.Id, new Case(Id = caseRecord.Id, Status = BTN_ConstantRepo.STATUS_OTHER_CONTRACT_SIGNED));
                 }
             }
         }
